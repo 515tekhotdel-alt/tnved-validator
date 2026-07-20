@@ -382,18 +382,20 @@ if st.session_state.results:
 
     df_results = pd.DataFrame(table_data)
 
-    # Отображаем таблицу с автошириной
-    st.dataframe(
+    # Отображаем таблицу с автошириной (принудительное обновление)
+    st.data_editor(
         df_results,
         column_config={
-            'Стандарт': st.column_config.TextColumn('Стандарт', width='medium'),
-            'Код ТН ВЭД': st.column_config.TextColumn('Код ТН ВЭД', width='small'),
-            'Разделы с наличием': st.column_config.TextColumn('Разделы с наличием', width='small'),
-            'Разделы с отсутствием': st.column_config.TextColumn('Разделы с отсутствием', width='small'),
-            'Статус': st.column_config.TextColumn('Статус', width='small'),
+            'Стандарт': st.column_config.TextColumn('Стандарт', width=None),
+            'Код ТН ВЭД': st.column_config.TextColumn('Код ТН ВЭД', width=None),
+            'Разделы с наличием': st.column_config.TextColumn('Разделы с наличием', width=None),
+            'Разделы с отсутствием': st.column_config.TextColumn('Разделы с отсутствием', width=None),
+            'Статус': st.column_config.TextColumn('Статус', width=None),
         },
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
+        disabled=True,
+        key=f"table_{len(df_results)}"  # уникальный ключ для принудительного обновления
     )
 else:
     if not check_btn:
