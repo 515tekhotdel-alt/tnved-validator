@@ -1,3 +1,5 @@
 # Временные файлы Excel
 ~$*.xlsx
 *.xlsx~
+# Word documents
+*.docx
