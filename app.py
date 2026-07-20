@@ -443,3 +443,36 @@ if st.session_state.results:
 else:
     if not check_btn:
         st.info("👆 Введите данные и нажмите «ВЫПОЛНИТЬ ПРОВЕРКУ»")
+
+# --- БОКОВАЯ ПАНЕЛЬ (продолжение) ---
+with st.sidebar:
+    # Информация о данных
+    st.info(
+        f"📊 Данные загружены\n\n"
+        f"Записей: **{info['rows']}**\n\n"
+        f"Стандартов: **{df['стандарт_ИЛ'].nunique()}**"
+    )
+
+    # Разделитель
+    st.divider()
+
+    # Плашка "Сказать спасибо" внизу боковой панели
+    st.markdown("""
+    <div style="text-align: center; 
+                padding: 8px;
+                margin-top: 10px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 8px;">
+        <span style="font-size: 12px; color: #555;">
+            🙏 Сказать спасибо:<br>
+            <a href="mailto:515@tekhotdel.com?subject=Проверка наличия ТНВЭД в ОА ИЛ&body=Спасибо! Отличное приложение! 🚀" 
+               style="color: #3498db; 
+                      text-decoration: none; 
+                      font-weight: 500;
+                      font-size: 13px;">
+                515@tekhotdel.com
+            </a>
+            😊
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
