@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import os
 from src.data_loader import load_data, get_data_info
 from src.config import LABS
 
@@ -15,7 +16,13 @@ st.set_page_config(
 if 'results' not in st.session_state:
     st.session_state.results = []
 
-# --- БОКОВАЯ ПАНЕЛЬ ---
+# Инициализация переменных для полей ввода
+if 'tnved_input' not in st.session_state:
+    st.session_state.tnved_input = ""
+if 'standards_input' not in st.session_state:
+    st.session_state.standards_input = ""
+
+# --- БОКОВАЯ ПАНЕЛЬ (определяем lab_name ПЕРВЫМ) ---
 with st.sidebar:
     # Оформленный заголовок выбора ИЛ
     st.markdown("""
@@ -48,10 +55,8 @@ lab_display_name = lab_name
 
 # Определяем градиент для нижней части в зависимости от лаборатории
 if lab_name == "ИЛ УЛЦ":
-    # Зеленый градиент для УЛЦ
     header_gradient = "linear-gradient(135deg, #00b894 0%, #00cec9 100%)"
 else:
-    # Синий градиент для Максвелла
     header_gradient = "linear-gradient(135deg, #0984e3 0%, #74b9ff 100%)"
 
 st.markdown(f"""
@@ -74,7 +79,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
 # --- ЗАГРУЗКА ДАННЫХ ---
 with st.spinner(f"Загрузка данных для {lab_name}..."):
     df = load_data(LABS[lab_name]["file"])
@@ -96,7 +100,50 @@ with st.sidebar:
 
 # --- ОСНОВНАЯ ОБЛАСТЬ ---
 
-# Форма ввода
+# --- ФОРМА ВВОДА ---
+
+# Блок загрузки файла
+with st.expander("📂 Загрузить макет сертификата", expanded=False):
+    uploaded_file = st.file_uploader(
+        "Выберите файл макета (Word .docx)",
+        type=['docx'],
+        help="Загрузите файл макета, и программа автоматически заполнит поля"
+    )
+
+    if uploaded_file is not None:
+        with st.spinner("Парсинг файла..."):
+            # Сохраняем временный файл
+            temp_path = f"temp_{uploaded_file.name}"
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+            try:
+                from src.parser import parse_certificate
+
+                parsed = parse_certificate(temp_path)
+
+                if parsed['tnved_codes']:
+                    st.session_state.tnved_input = ", ".join(parsed['tnved_codes'])
+                    st.success(f"✅ Найдено кодов ТНВЭД: {len(parsed['tnved_codes'])}")
+                else:
+                    st.warning("⚠️ Коды ТНВЭД не найдены")
+
+                if parsed['standards']:
+                    st.session_state.standards_input = "\n".join(parsed['standards'])
+                    st.success(f"✅ Найдено стандартов: {len(parsed['standards'])}")
+                else:
+                    st.warning("⚠️ Стандарты не найдены")
+
+
+            except Exception as e:
+                st.error(f"❌ Ошибка при парсинге: {str(e)}")
+            finally:
+                # Удаляем временный файл
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+    st.divider()
+
 st.subheader("📝 Введите данные для проверки")
 
 col1, col2 = st.columns(2)
@@ -104,6 +151,7 @@ col1, col2 = st.columns(2)
 with col1:
     tnved_input = st.text_area(
         "Коды ТНВЭД",
+        value=st.session_state.tnved_input,
         placeholder="Введите коды ТНВЭД\nПример: 8413\n8415\n8418",
         height=200,
         help="Каждый код с новой строки или через запятую, точку с запятой, |"
@@ -112,6 +160,7 @@ with col1:
 with col2:
     standards_input = st.text_area(
         "Стандарты",
+        value=st.session_state.standards_input,
         placeholder="Введите стандарты\nПример: ГОСТ Р 12345-2021\nГОСТ 67890-2019",
         height=200,
         help="Каждый стандарт с новой строки или через запятую, точку с запятой, |"
@@ -210,37 +259,6 @@ if check_btn:
             result_parts.append(f"{part}: {', '.join(ranges)}")
 
         return "; ".join(result_parts)
-
-
-    # --- ФУНКЦИЯ ГРУППИРОВКИ РАЗДЕЛОВ (старая, для обратной совместимости) ---
-    def group_sections(sections_list):
-        if not sections_list:
-            return ""
-        try:
-            sections = []
-            for s in sections_list:
-                if pd.notna(s):
-                    try:
-                        sections.append(int(float(s)))
-                    except:
-                        continue
-            sections = sorted(list(set(sections)))
-            if not sections:
-                return ""
-            ranges = []
-            start = sections[0]
-            end = sections[0]
-            for i in range(1, len(sections)):
-                if sections[i] == end + 1:
-                    end = sections[i]
-                else:
-                    ranges.append(str(start) if start == end else f"{start}-{end}")
-                    start = sections[i]
-                    end = sections[i]
-            ranges.append(str(start) if start == end else f"{start}-{end}")
-            return ", ".join(ranges)
-        except:
-            return "ошибка"
 
 
     # --- ОСНОВНАЯ ЛОГИКА ПРОВЕРКИ ---
