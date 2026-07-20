@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 from src.data_loader import load_data, get_data_info
+from src.config import LABS
 
 # Настройка страницы
 st.set_page_config(
@@ -14,8 +15,25 @@ st.set_page_config(
 if 'results' not in st.session_state:
     st.session_state.results = []
 
-# Заголовок
-st.markdown("""
+# --- БОКОВАЯ ПАНЕЛЬ (определяем lab_name ПЕРВЫМ) ---
+with st.sidebar:
+    lab_name = st.selectbox(
+        "Выберите ИЛ:",
+        list(LABS.keys())
+    )
+
+    st.divider()
+
+# --- ЗАГОЛОВОК ---
+lab_display_name = lab_name
+
+# Определяем цвет для нижней части заголовка
+if lab_name == "ИЛ УЛЦ":
+    header_color = "linear-gradient(135deg, #1b5e20 0%, #43a047 100%)"  # зеленый
+else:
+    header_color = "linear-gradient(135deg, #1565c0 0%, #42a5f5 100%)"   # синий
+
+st.markdown(f"""
 <div style="text-align: center; margin-bottom: 20px;">
     <div style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
                 padding: 20px;
@@ -23,20 +41,21 @@ st.markdown("""
                 color: white;">
         <h1 style="margin:0; font-size: 28px;">🔍 Проверка наличия ТНВЭД в ОА ИЛ</h1>
     </div>
-    <div style="background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%);
-                padding: 12px;
+    <div style="background: {header_color};
+                padding: 16px;
                 border-radius: 0 0 10px 10px;
                 color: white;
-                font-size: 16px;
-                font-weight: 500;">
-        Испытательная лаборатория «Максвелл»
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: 0.5px;">
+        {lab_display_name}
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Загрузка данных
-with st.spinner("Загрузка данных..."):
-    df = load_data()
+# --- ЗАГРУЗКА ДАННЫХ ---
+with st.spinner(f"Загрузка данных для {lab_name}..."):
+    df = load_data(LABS[lab_name]["file"])
 
 if df.empty:
     st.error("❌ Данные не загружены. Проверьте наличие файла в папке data/")
@@ -44,28 +63,14 @@ if df.empty:
 
 info = get_data_info(df)
 
-# --- БОКОВАЯ ПАНЕЛЬ ---
+# --- БОКОВАЯ ПАНЕЛЬ (продолжение) ---
 with st.sidebar:
-
-    # Выбор лаборатории (пока одна)
-    st.selectbox(
-        "Выберите ИЛ:",
-        ["ИЛ Максвел 2026"],
-        disabled=True,
-        help="В текущей версии доступна только одна лаборатория"
-    )
-
-    st.divider()
-
     # Информация о данных
     st.info(
         f"📊 Данные загружены\n\n"
         f"Записей: **{info['rows']}**\n\n"
         f"Стандартов: **{df['стандарт_ИЛ'].nunique()}**"
     )
-
-    st.divider()
-
 
 # --- ОСНОВНАЯ ОБЛАСТЬ ---
 
@@ -127,8 +132,6 @@ if check_btn:
         st.warning("⚠️ Не удалось распознать введенные данные")
         st.stop()
 
-    # st.success(f"✅ Найдено кодов ТНВЭД: {len(tnved_list)}, стандартов: {len(standards_raw)}")
-
 
     # --- ФУНКЦИЯ ОЧИСТКИ СТАНДАРТА (убираем год и скобки) ---
     def clean_standard(std_text):
@@ -146,7 +149,48 @@ if check_btn:
         return std
 
 
-    # --- ФУНКЦИЯ ГРУППИРОВКИ РАЗДЕЛОВ В ДИАПАЗОНЫ ---
+    # --- ФУНКЦИЯ ГРУППИРОВКИ РАЗДЕЛОВ С ЧАСТЯМИ ---
+    def group_sections_with_parts(sections_with_parts):
+        """
+        Группирует разделы по part.
+        Вход: список кортежей (part, section_number)
+        Выход: строка вида "ч1: 1-5, 10; ч1_2: 1-3, 8"
+        """
+        if not sections_with_parts:
+            return ""
+
+        # Группируем по part
+        parts_dict = {}
+        for part, section in sections_with_parts:
+            if part not in parts_dict:
+                parts_dict[part] = []
+            parts_dict[part].append(section)
+
+        # Для каждой part группируем разделы в диапазоны
+        result_parts = []
+        for part in sorted(parts_dict.keys()):
+            sections = parts_dict[part]
+            sections = sorted(list(set(sections)))
+
+            # Группируем в диапазоны
+            ranges = []
+            start = sections[0]
+            end = sections[0]
+            for i in range(1, len(sections)):
+                if sections[i] == end + 1:
+                    end = sections[i]
+                else:
+                    ranges.append(str(start) if start == end else f"{start}-{end}")
+                    start = sections[i]
+                    end = sections[i]
+            ranges.append(str(start) if start == end else f"{start}-{end}")
+
+            result_parts.append(f"{part}: {', '.join(ranges)}")
+
+        return "; ".join(result_parts)
+
+
+    # --- ФУНКЦИЯ ГРУППИРОВКИ РАЗДЕЛОВ (старая, для обратной совместимости) ---
     def group_sections(sections_list):
         if not sections_list:
             return ""
@@ -203,7 +247,7 @@ if check_btn:
                 })
             continue
 
-        # Ищем стандарт в базе
+        # Ищем стандарт в базе (все строки с этим стандартом)
         mask = df['стандарт_ИЛ'].fillna('').str.contains(
             re.escape(clean_std),
             case=False,
@@ -239,34 +283,47 @@ if check_btn:
             if not tnved_clean.isdigit():
                 tnved_clean = re.sub(r'[^\d]', '', tnved_clean)
 
-            sections_present = []
-            sections_absent = []
+            sections_present = []  # теперь храним (part, section)
+            sections_absent = []  # теперь храним (part, section)
 
-            # Проверяем каждую строку с этим стандартом
-            for _, row in matching_rows.iterrows():
-                # Коды ТНВЭД в ИЛ (разделитель ;)
-                il_codes_raw = str(row['код_ТНВЭД_ИЛ']).split(';') if pd.notna(row['код_ТНВЭД_ИЛ']) else []
-                il_codes_clean = []
-                for code in il_codes_raw:
-                    code_clean = re.sub(r'\s+', '', code.strip())
-                    if code_clean.isdigit():
-                        il_codes_clean.append(code_clean)
+            # Получаем уникальные комбинации (part, раздел) для этого стандарта
+            unique_sections = matching_rows[['part', 'раздел_ИЛ']].dropna().drop_duplicates()
 
-                # Проверяем совпадение
+            # Для каждого раздела проверяем наличие кода
+            for _, row in unique_sections.iterrows():
+                part = row['part']
+                section = row['раздел_ИЛ']
+
+                # Все строки для этого part, раздела и стандарта
+                section_rows = matching_rows[
+                    (matching_rows['part'] == part) &
+                    (matching_rows['раздел_ИЛ'] == section)
+                    ]
+
+                # Проверяем, есть ли код хотя бы в одной строке этого раздела
                 found = False
-                for il_code in il_codes_clean:
-                    if len(tnved_clean) >= len(il_code):
-                        if tnved_clean[:len(il_code)] == il_code:
-                            found = True
-                            break
+                for _, r in section_rows.iterrows():
+                    # Коды ТНВЭД в ИЛ (разделитель ;)
+                    il_codes_raw = str(r['код_ТНВЭД_ИЛ']).split(';') if pd.notna(r['код_ТНВЭД_ИЛ']) else []
+                    il_codes_clean = []
+                    for code in il_codes_raw:
+                        code_clean = re.sub(r'\s+', '', code.strip())
+                        if code_clean.isdigit():
+                            il_codes_clean.append(code_clean)
 
-                # Собираем разделы
-                section = row['раздел_ИЛ'] if pd.notna(row['раздел_ИЛ']) else None
-                if section is not None:
+                    # Проверяем совпадение
+                    for il_code in il_codes_clean:
+                        if len(tnved_clean) >= len(il_code):
+                            if tnved_clean[:len(il_code)] == il_code:
+                                found = True
+                                break
                     if found:
-                        sections_present.append(section)
-                    else:
-                        sections_absent.append(section)
+                        break
+
+                if found:
+                    sections_present.append((part, section))
+                else:
+                    sections_absent.append((part, section))
 
             # Определяем статус
             if sections_present and sections_absent:
@@ -278,9 +335,9 @@ if check_btn:
             else:
                 status = '⚠️ Нет данных о разделах'
 
-            # Группируем разделы
-            present_str = group_sections(sections_present)
-            absent_str = group_sections(sections_absent)
+            # Группируем разделы с частями
+            present_str = group_sections_with_parts(sections_present)
+            absent_str = group_sections_with_parts(sections_absent)
 
             standard_result['Результаты'].append({
                 'Код ТН ВЭД': tnved,
@@ -325,16 +382,19 @@ if st.session_state.results:
 
     df_results = pd.DataFrame(table_data)
 
-    # Отображаем таблицу
+    # Отображаем таблицу с автошириной
     st.dataframe(
         df_results,
         column_config={
-            'Стандарт': st.column_config.TextColumn('Стандарт', width=250),
-            'Код ТН ВЭД': st.column_config.TextColumn('Код ТН ВЭД', width=120),
-            'Разделы с наличием': st.column_config.TextColumn('Разделы с наличием', width=150),
-            'Разделы с отсутствием': st.column_config.TextColumn('Разделы с отсутствием', width=150),
-            'Статус': st.column_config.TextColumn('Статус', width=200),
+            'Стандарт': st.column_config.TextColumn('Стандарт', width='medium'),
+            'Код ТН ВЭД': st.column_config.TextColumn('Код ТН ВЭД', width='small'),
+            'Разделы с наличием': st.column_config.TextColumn('Разделы с наличием', width='small'),
+            'Разделы с отсутствием': st.column_config.TextColumn('Разделы с отсутствием', width='small'),
+            'Статус': st.column_config.TextColumn('Статус', width='small'),
         },
         hide_index=True,
         use_container_width=True
     )
+else:
+    if not check_btn:
+        st.info("👆 Введите данные и нажмите «ВЫПОЛНИТЬ ПРОВЕРКУ»")
