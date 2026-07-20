@@ -112,7 +112,6 @@ with st.expander("📂 Загрузить макет сертификата", ex
 
     if uploaded_file is not None:
         with st.spinner("Парсинг файла..."):
-            # Сохраняем временный файл
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -134,11 +133,13 @@ with st.expander("📂 Загрузить макет сертификата", ex
                 else:
                     st.warning("⚠️ Стандарты не найдены")
 
+                if parsed.get('product_info'):
+                    with st.expander("📦 Информация о продукции"):
+                        st.write(parsed['product_info'])
 
             except Exception as e:
                 st.error(f"❌ Ошибка при парсинге: {str(e)}")
             finally:
-                # Удаляем временный файл
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 

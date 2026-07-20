@@ -8,7 +8,7 @@ from docx import Document
 def parse_certificate(file_path):
     """
     Парсинг макета сертификата из Word документа.
-    Возвращает: dict с ключами 'tnved_codes', 'standards'
+    Возвращает: dict с ключами 'tnved_codes', 'standards', 'product_info'
     """
     doc = Document(file_path)
 
@@ -27,7 +27,8 @@ def parse_certificate(file_path):
 
     result = {
         'tnved_codes': [],
-        'standards': []
+        'standards': [],
+        'product_info': ''
     }
 
     # --- 1. Парсим коды ТНВЭД ---
@@ -45,10 +46,19 @@ def parse_certificate(file_path):
             codes = [c.strip() for c in codes if c.strip()]
             result['tnved_codes'] = codes
 
-    # --- 2. Парсим стандарты ---
+    # --- 2. Парсим информацию о продукции ---
+    product_match = re.search(r'ПРОДУКЦИЯ\s*([\s\S]*?)(?=КОД ТН ВЭД ЕАЭС|СЕРИЙНЫЙ|СООТВЕТСТВУЕТ|$)', text,
+                              re.IGNORECASE)
+    if product_match:
+        product_info = product_match.group(1).strip()
+        product_info = re.sub(r'\n+', ' ', product_info)
+        product_info = re.sub(r'\s+', ' ', product_info)
+        result['product_info'] = product_info
+
+    # --- 3. Парсим стандарты ---
     standards_set = set()
 
-    # Удаляем все, что в скобках, и сами скобки из текста (заменяем на пробел)
+    # Удаляем все, что в скобках, и сами скобки из текста
     text_clean = re.sub(r'\([^)]*\)', ' ', text)
 
     def clean_standard(std):
@@ -83,7 +93,7 @@ def parse_certificate(file_path):
                 return f"ГОСТ {std}"
         return std
 
-    # 2.1 Ищем в таблицах
+    # 3.1 Ищем в таблицах
     for table in doc.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells]
@@ -96,14 +106,13 @@ def parse_certificate(file_path):
                         if is_standard(std_clean):
                             standards_set.add(restore_gost(std_clean))
 
-    # 2.2 Ищем в блоке "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ" (с удаленными скобками)
+    # 3.2 Ищем в блоке "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"
     additional_match = re.search(r'ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ\s*([\s\S]*?)(?=СРОК ДЕЙСТВИЯ|$)', text_clean,
                                  re.IGNORECASE)
 
     if additional_match:
         additional_text = additional_match.group(1)
 
-        # Ищем стандарты
         std_pattern = r'(ГОСТ\s*[А-Я\-]*\s*[\d\-\.]+[^\s,;]*|[A-Z]+\s*[\d\-\.]+[^\s,;]*)'
         std_matches = re.findall(std_pattern, additional_text, re.IGNORECASE)
         for std in std_matches:
@@ -114,7 +123,7 @@ def parse_certificate(file_path):
                 if is_standard(std_clean):
                     standards_set.add(restore_gost(std_clean))
 
-    # 2.3 Если не нашли — ищем во всем тексте
+    # 3.3 Если не нашли — ищем во всем тексте
     if not standards_set:
         std_pattern = r'(ГОСТ\s*[А-Я\-]*\s*[\d\-\.]+[^\s,;]*|[A-Z]+\s*[\d\-\.]+[^\s,;]*)'
         std_matches = re.findall(std_pattern, text_clean, re.IGNORECASE)
@@ -126,13 +135,11 @@ def parse_certificate(file_path):
                 if is_standard(std_clean):
                     standards_set.add(restore_gost(std_clean))
 
-    # Дополнительная очистка: убираем стандарты с лишними скобками в конце
     final_standards = []
     for std in standards_set:
         std_clean = re.sub(r'[\)]+$', '', std)
         final_standards.append(std_clean)
 
-    # Жесткая замена ГОСТ EN 301 на полную версию
     final_standards_fixed = []
     for std in final_standards:
         if std == "ГОСТ EN 301":
