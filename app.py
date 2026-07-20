@@ -15,11 +15,30 @@ st.set_page_config(
 if 'results' not in st.session_state:
     st.session_state.results = []
 
-# --- БОКОВАЯ ПАНЕЛЬ (определяем lab_name ПЕРВЫМ) ---
+# --- БОКОВАЯ ПАНЕЛЬ ---
 with st.sidebar:
+    # Оформленный заголовок выбора ИЛ
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #ff8a5c 100%);
+                padding: 12px 16px;
+                border-radius: 10px;
+                margin-bottom: 16px;
+                text-align: center;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <span style="color: white;
+                     font-size: 16px;
+                     font-weight: 700;
+                     letter-spacing: 0.5px;
+                     text-shadow: 0 1px 4px rgba(0,0,0,0.15);">
+            🏢 Выберите ИЛ
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
     lab_name = st.selectbox(
         "Выберите ИЛ:",
-        list(LABS.keys())
+        list(LABS.keys()),
+        label_visibility="collapsed"  # скрываем стандартную метку
     )
 
     st.divider()
@@ -27,31 +46,34 @@ with st.sidebar:
 # --- ЗАГОЛОВОК ---
 lab_display_name = lab_name
 
-# Определяем цвет для нижней части заголовка
+# Определяем градиент для нижней части в зависимости от лаборатории
 if lab_name == "ИЛ УЛЦ":
-    header_color = "linear-gradient(135deg, #1b5e20 0%, #43a047 100%)"  # зеленый
+    # Зеленый градиент для УЛЦ
+    header_gradient = "linear-gradient(135deg, #00b894 0%, #00cec9 100%)"
 else:
-    header_color = "linear-gradient(135deg, #1565c0 0%, #42a5f5 100%)"   # синий
+    # Синий градиент для Максвелла
+    header_gradient = "linear-gradient(135deg, #0984e3 0%, #74b9ff 100%)"
 
 st.markdown(f"""
-<div style="text-align: center; margin-bottom: 20px;">
-    <div style="background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
-                padding: 20px;
-                border-radius: 10px 10px 0 0;
+<div style="text-align: center; margin-bottom: 24px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 30px 20px 24px 20px;
                 color: white;">
-        <h1 style="margin:0; font-size: 28px;">🔍 Проверка наличия ТНВЭД в ОА ИЛ</h1>
+        <h1 style="margin:0; font-size: 26px; font-weight: 600; letter-spacing: 0.3px;">
+            🔍 Проверка наличия ТНВЭД в ОА ИЛ
+        </h1>
     </div>
-    <div style="background: {header_color};
-                padding: 16px;
-                border-radius: 0 0 10px 10px;
+    <div style="background: {header_gradient};
+                padding: 14px;
                 color: white;
-                font-size: 22px;
-                font-weight: 700;
-                letter-spacing: 0.5px;">
+                font-size: 20px;
+                font-weight: 600;
+                letter-spacing: 0.2px;">
         {lab_display_name}
     </div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # --- ЗАГРУЗКА ДАННЫХ ---
 with st.spinner(f"Загрузка данных для {lab_name}..."):
@@ -267,7 +289,7 @@ if check_btn:
                     'Код ТН ВЭД': tnved,
                     'Разделы с наличием': '',
                     'Разделы с отсутствием': '',
-                    'Статус': '❌ Нет стандарта в ОА ИЛ'
+                    'Статус': '☢️ НЕТ СТАНДАРТА'
                 })
             continue
 
@@ -331,7 +353,7 @@ if check_btn:
             elif sections_present and not sections_absent:
                 status = '✅ ПРИСУТСТВУЕТ'
             elif not sections_present and sections_absent:
-                status = '⚠️ ОТСУТСТВУЕТ'
+                status = '❌ НЕТ КОДА'
             else:
                 status = '⚠️ Нет данных о разделах'
 
@@ -367,8 +389,10 @@ if st.session_state.results:
                 status_display = '⚠️ ПРИСУТСТВУЕТ ЧАСТИЧНО'
             elif status == '✅ ПРИСУТСТВУЕТ':
                 status_display = '✅ ПРИСУТСТВУЕТ'
-            elif status == '⚠️ ОТСУТСТВУЕТ':
-                status_display = '❌ ОТСУТСТВУЕТ'
+            elif status == '❌ НЕТ КОДА':
+                status_display = '❌ НЕТ КОДА'
+            elif status == '☢️ НЕТ СТАНДАРТА':
+                status_display = '☢️ НЕТ СТАНДАРТА'
             else:
                 status_display = status
 
@@ -382,7 +406,7 @@ if st.session_state.results:
 
     df_results = pd.DataFrame(table_data)
 
-    # Отображаем таблицу с автошириной (принудительное обновление)
+    # Отображаем таблицу с автошириной
     st.data_editor(
         df_results,
         column_config={
@@ -395,7 +419,7 @@ if st.session_state.results:
         hide_index=True,
         use_container_width=True,
         disabled=True,
-        key=f"table_{len(df_results)}"  # уникальный ключ для принудительного обновления
+        key=f"table_{len(df_results)}"
     )
 else:
     if not check_btn:
